@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   post-countdown:
@@ -20,19 +20,25 @@ jobs:
         with:
           node-version: "22"
 
+      # The news checker's state lives in the Actions cache, not in git. Committing it every four
+      # hours put 170-plus "Update GW3 news checker state" commits on main and left every checkout
+      # drifting behind. The tracked news-state.json is the seed for a cold cache only.
+      - name: Restore news checker state
+        uses: actions/cache/restore@v4
+        with:
+          path: news-state.json
+          key: gw3-news-state-${{ github.run_id }}
+          restore-keys: |
+            gw3-news-state-
+
       - name: Check official Guild Wars site and post countdown
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.GW3_DISCORD_WEBHOOK_URL }}
         run: node github-action-post.mjs
 
       - name: Save news checker state
-        run: |
-          if git diff --quiet -- news-state.json; then
-            echo "No news state changes to save."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add news-state.json
-            git commit -m "Update GW3 news checker state"
-            git push
-          fi
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: news-state.json
+          key: gw3-news-state-${{ github.run_id }}
